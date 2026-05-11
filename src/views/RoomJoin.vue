@@ -24,6 +24,17 @@
             {{ error }}
           </v-alert>
 
+          <!-- Fork addition: surface the preselected media so the joiner
+               knows what they're about to watch. -->
+          <v-alert
+            v-if="preselectTitle"
+            type="info"
+            text
+            class="mx-4"
+          >
+            Joining a watch party for <strong>{{ preselectTitle }}</strong>
+          </v-alert>
+
           <v-expansion-panels
             multiple
           >
@@ -106,6 +117,30 @@ export default {
       'GET_ACTIVE_MEDIA_METADATA',
       'GET_CHOSEN_CLIENT',
     ]),
+
+    // --- Fork addition: media preselect from URL query string ---
+    //
+    // When the URL looks like
+    //   /#/join/abc123?machineIdentifier=XXX&ratingKey=YYY&title=The+Matrix
+    // we route the user straight to the PlexMedia page for that title
+    // after they join, instead of dropping them on the generic PlexHome.
+    // The Discord bot (or whoever generated the invite) is responsible for
+    // putting these params on the URL.
+    preselectMachineIdentifier() {
+      const v = this.$route.query.machineIdentifier;
+      return typeof v === 'string' && v.length > 0 ? v : null;
+    },
+    preselectRatingKey() {
+      const v = this.$route.query.ratingKey;
+      return typeof v === 'string' && v.length > 0 ? v : null;
+    },
+    preselectTitle() {
+      const v = this.$route.query.title;
+      return typeof v === 'string' && v.length > 0 ? v : null;
+    },
+    hasPreselect() {
+      return !!(this.preselectMachineIdentifier && this.preselectRatingKey);
+    },
   },
 
   async created() {
@@ -129,7 +164,20 @@ export default {
         });
 
         if (this.$route.name === 'RoomJoin') {
-          if (this.GET_CHOSEN_CLIENT_ID === slPlayerClientId || !this.GET_ACTIVE_MEDIA_METADATA) {
+          // Fork addition: if invite carried a preselected media item,
+          // route there first. Falls back to default behavior if not.
+          if (this.hasPreselect) {
+            this.$router.push(this.linkWithRoom({
+              name: 'PlexMedia',
+              params: {
+                machineIdentifier: this.preselectMachineIdentifier,
+                ratingKey: this.preselectRatingKey,
+              },
+            }));
+          } else if (
+            this.GET_CHOSEN_CLIENT_ID === slPlayerClientId
+            || !this.GET_ACTIVE_MEDIA_METADATA
+          ) {
             this.$router.push(this.linkWithRoom({ name: 'PlexHome' }));
           } else {
             this.redirectToMediaPage();
